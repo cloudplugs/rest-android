@@ -126,7 +126,7 @@ public class RestManager extends RestBaseManager
 	 */
 	public int execEnrollController(String model, String ctrl, String pass, String hwid, String name, JSONObject props, RestCallback cb) {
 		Validate.modelId(model);
-		Validate.devId(ctrl);
+		Validate.hwid(ctrl, "ctrl");
 		Validate.pass(pass);
 		if(hwid != null) Validate.hwid(hwid);
 		return execEnrollController(bodyGen(
@@ -802,7 +802,7 @@ public class RestManager extends RestBaseManager
 	 * @param channelMask the channel mask used to filter which data should be retrieved
 	 * @param before if not null, the most recent timestamp (Number, String or java.util.Date) of the data to retrieve or a String contains the published data ID before which retrieve the data
 	 * @param after if not null, the minimum timestamp (Number, String or java.util.Date) of the data to retrieve or a String contains the published data ID after which retrieve the data
-	 * @param of if not null, the CSV string of Plug-IDs published the data to retrieve.
+	 * @param of if not null, the CSV string of Plug-IDs published the data to retrieve
 	 * @param offset if greater than zero, the resulting response will contain values after the offset-th one
 	 * @param limit if greater than zero, the resulting response will contain at most
 	 * @param cb if not null, the callback will receive the {@link Request} and its {@link Response}
@@ -821,7 +821,9 @@ public class RestManager extends RestBaseManager
 	/**
 	 * Enqueue an asynchronous request for publishing data.
 	 * This is the a low level method you can specify directly the body of the request.
-	 * See {@link #execPublishData(String, Object, Object, Object, RestCallback)}
+	 * See {@link #execPublishData(String, Object, Object, String, Object, RestCallback)},
+	 * {@link #execPublishData(String, Object, Object, String, RestCallback)},
+	 * {@link #execPublishData(String, Object, Object, Object, RestCallback)}
 	 * and {@link #execPublishData(String, Object, Object, RestCallback)}
 	 * for more convenient ways to publish data.
 	 * Authentication credentials must be set before invoking this method.
@@ -844,13 +846,50 @@ public class RestManager extends RestBaseManager
 	 * @param channelName the channel name to publish data to
 	 * @param data the JSON data to publish
 	 * @param at the timestamp (Number, String or java.util.Date) of the data, if null the server will automatically set this value as the current date
+	 * @param of the Plug-ID string of the publisher of the data; null means this device
+	 * @param ttlOrExpire if not null, an expire timestamp (Number, String or java.util.Date) to set when this data will be automatically removed or a time-to-live of the data in seconds
+	 * @param cb if not null, the callback will receive the {@link Request} and its {@link Response}
+	 * @return the identifier of this asynchronous execution
+	 * @throws RestException for invalid authentication credentials or IllegalArgumentException for argument validation error
+	 */
+	public int execPublishData(String channelName, Object data, Object at, String of, Object ttlOrExpire, RestCallback cb) {
+		return execPublishData(channelName, null, data, at, of, ttlOrExpire, cb);
+	}
+
+	/**
+	 * Enqueue an asynchronous request for publishing data.
+	 * Authentication credentials must be set before invoking this method.
+	 * @param channelName the channel name to publish data to
+	 * @param data the JSON data to publish
+	 * @param at the timestamp (Number, String or java.util.Date) of the data, if null the server will automatically set this value as the current date
 	 * @param ttlOrExpire if not null, an expire timestamp (Number, String or java.util.Date) to set when this data will be automatically removed or a time-to-live of the data in seconds
 	 * @param cb if not null, the callback will receive the {@link Request} and its {@link Response}
 	 * @return the identifier of this asynchronous execution
 	 * @throws RestException for invalid authentication credentials or IllegalArgumentException for argument validation error
 	 */
 	public int execPublishData(String channelName, Object data, Object at, Object ttlOrExpire, RestCallback cb) {
-		return execPublishData(channelName, null, data, at, ttlOrExpire, cb);
+		return execPublishData(channelName, null, data, at, null, ttlOrExpire, cb);
+	}
+
+	/**
+	 * Enqueue an asynchronous request for publishing new data or changing an already published data.
+	 * The response could fail if the authentication credentials don't have enough grants to complete the publication.
+	 * Authentication credentials must be set before invoking this method.
+	 * @param channelName the channel name to publish data to
+	 * @param id null for publishing new data, otherwise the id of a previously published data to modify
+	 * @param data the JSON data to publish
+	 * @param at the timestamp (Number, String or java.util.Date) of the data, if null the server will automatically set this value as the current date
+	 * @param of the Plug-ID string of the publisher of the data; null means this device
+	 * @param ttlOrExpire if not null, an expire timestamp (Number, String or java.util.Date) to set when this data will be automatically removed or a time-to-live of the data in seconds
+	 * @param cb if not null, the callback will receive the {@link Request} and its {@link Response}
+	 * @return the identifier of this asynchronous execution
+	 * @throws RestException for invalid authentication credentials or IllegalArgumentException for argument validation error
+	 */
+	public int execPublishData(String channelName, String id, Object data, Object at, String of, Object ttlOrExpire, RestCallback cb) {
+		if(channelName == null) throw new IllegalArgumentException("null channel name");
+		if(of != null) Validate.plugId(of);
+		Object[] exp = toExpireKV(ttlOrExpire);
+		return execPublishData(channelName, bodyGen(K_ID, id, K_DATA, data, K_AT, ts(at, K_AT), K_OF, of, exp[0], exp[1]), cb);
 	}
 
 	/**
@@ -867,9 +906,22 @@ public class RestManager extends RestBaseManager
 	 * @throws RestException for invalid authentication credentials or IllegalArgumentException for argument validation error
 	 */
 	public int execPublishData(String channelName, String id, Object data, Object at, Object ttlOrExpire, RestCallback cb) {
-		if(channelName == null) throw new IllegalArgumentException("null channel name");
-		Object[] exp = toExpireKV(ttlOrExpire);
-		return execPublishData(channelName, bodyGen(K_ID, id, K_DATA, data, K_AT, ts(at, K_AT), exp[0], exp[1]), cb);
+		return execPublishData(channelName, id, data, at, null, ttlOrExpire, cb);
+	}
+
+	/**
+	 * Enqueue an asynchronous request for publishing data.
+	 * Authentication credentials must be set before invoking this method.
+	 * @param channelName the channel name to publish data to
+	 * @param data the JSON data to publish
+	 * @param at the timestamp (Number, String or java.util.Date) of the data, if null the server will automatically set this value as the current date
+	 * @param of the Plug-ID string of the publisher of the data; null means this device
+	 * @param cb if not null, the callback will receive the {@link Request} and its {@link Response}
+	 * @return the identifier of this asynchronous execution
+	 * @throws RestException for invalid authentication credentials or IllegalArgumentException for argument validation error
+	 */
+	public int execPublishData(String channelName, Object data, Object at, String of, RestCallback cb) {
+		return execPublishData(channelName, data, at, of, null, cb);
 	}
 
 	/**
@@ -883,7 +935,7 @@ public class RestManager extends RestBaseManager
 	 * @throws RestException for invalid authentication credentials or IllegalArgumentException for argument validation error
 	 */
 	public int execPublishData(String channelName, Object data, Object at, RestCallback cb) {
-		return execPublishData(channelName, data, at, null, cb);
+		return execPublishData(channelName, data, at, null, null, cb);
 	}
 
 	/**

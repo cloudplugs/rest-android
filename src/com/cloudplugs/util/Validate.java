@@ -95,8 +95,11 @@ public final class Validate
 		if(!Channel.isName(channel)) throw new IllegalArgumentException("invalid channel name");
 	}
 
+	public static void hwid(String hwid, String name) {
+		str(hwid, MIN_HWID_LENGTH, name);
+	}
 	public static void hwid(String hwid) {
-		str(hwid, MIN_HWID_LENGTH, "hwid");
+		hwid(hwid, "hwid");
 	}
 
 	public static void pass(String pass) {
